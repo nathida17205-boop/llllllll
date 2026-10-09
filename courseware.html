@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>การพัฒนาสื่อความจริงเสริม (AR) เพื่อการเรียนรู้</title>
+<link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/3.5.0/model-viewer.min.js"></script>
+<style>
+:root{--bg:#fff;--ink:#1f2d3d;--teal:#1f3a5f;--sun:#dfe5ee;--card:#f1f4f8;--line:#cbd2dc;--bad:#8f4a4a;--ok:#4a7a5e}
+*{box-sizing:border-box}
+body{margin:0;font-family:"Sarabun",sans-serif;background:var(--bg);color:var(--ink);font-size:18px;line-height:1.7}
+header{background:var(--teal);color:#fff;padding:12px 20px;display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+header h1{font-size:1.1rem;margin:0;flex:1}
+main{max-width:900px;margin:0 auto;padding:16px}
+.card{background:var(--card);border:2px solid var(--line);border-radius:14px;padding:16px;margin:14px 0}
+h2{margin:.2em 0;font-size:1.25rem}h3{margin:.4em 0}
+input,select,textarea,button{font:inherit;padding:8px 12px;border-radius:10px;border:2px solid var(--line);max-width:100%}
+button{background:var(--sun);border-color:var(--sun);font-weight:700;cursor:pointer}
+button.alt{background:#fff;border-color:var(--teal);color:var(--teal)}
+:focus-visible{outline:3px solid var(--teal);outline-offset:2px}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:6px 0}
+.msg{padding:8px 12px;border-radius:10px;margin:8px 0}.msg.err{background:#f2e6e6;color:var(--bad)}.msg.ok{background:#e6efe9;color:var(--ok)}
+nav{display:flex;gap:8px;flex-wrap:wrap}nav button{background:#fff;border-color:#fff}nav button.on{background:var(--sun);border-color:var(--sun)}
+.q{margin:10px 0;padding:8px;background:#fff;border-radius:10px}.q label{display:block;cursor:pointer}
+.table-wrap{overflow-x:auto}table{border-collapse:collapse;width:100%;font-size:.9rem}th,td{border:1px solid var(--line);padding:6px 8px;text-align:left}
+.avatar{width:64px;height:64px;border-radius:50%;object-fit:cover;background:#fff;border:3px solid var(--sun)}
+.hd{background:var(--teal);border-color:var(--teal)}.hd h2,.hd p{color:#fff}th{background:var(--teal);color:#fff}figcaption{font-size:.9rem;color:#52606d}pre{background:#fff;border:1px solid var(--line);padding:8px;overflow-x:auto;font-size:.8rem}.done{color:var(--ok);font-weight:700}.hide{display:none}
+</style>
+</head>
+<body>
+<header>
+  <img id="av" class="avatar hide" alt="รูปโปรไฟล์">
+  <h1>การพัฒนาสื่อความจริงเสริม (AR) เพื่อการเรียนรู้</h1>
+  <nav id="nav" class="hide"></nav>
+  <button id="out" class="alt hide">ออกจากระบบ</button>
+</header>
+<main id="app"></main>
+<script>
+// ===== ตั้งค่า: ใส่ค่าจาก Supabase > Project Settings > API =====
+const SUPABASE_URL = 'https://YOUR-PROJECT.supabase.co';
+const SUPABASE_ANON_KEY = 'YOUR-ANON-PUBLIC-KEY';   // anon key เท่านั้น
+const EMAIL_DOMAIN = 'nnh-student.example.com';     // โดเมนอีเมลสมมติของผู้เรียน
+// =================================================================
+const CFG_MISSING = /YOUR-/.test(SUPABASE_URL + SUPABASE_ANON_KEY);
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const $ = id => document.getElementById(id), app = $('app'), nav = $('nav');
+const UNITS=[
+{t:'หน่วยที่ 1 พื้นฐานความจริงเสริม',o:'อธิบายองค์ประกอบของ AR ตาม Azuma (1997) และจำแนก AR, VR, MR ตามแนวคิดของ Milgram และ Kishino (1994) ได้',
+ s:[['นิยามของ AR','Azuma (1997) กำหนดว่า AR ต้องมีสามองค์ประกอบ ได้แก่ รวมวัตถุจริงกับวัตถุเสมือน โต้ตอบได้แบบเรียลไทม์ และลงตำแหน่งสอดคล้องกับโลกจริงในสามมิติ'],
+ ['AR, VR และ MR','Milgram และ Kishino (1994) เสนอ reality–virtuality continuum เรียงจากสภาพแวดล้อมจริงไปจนถึงสภาพแวดล้อมเสมือน โดยความจริงผสม (MR) ครอบคลุมช่วงที่อยู่ระหว่างสองปลายนั้น'],
+ ['ตัวอย่างในห้องเรียน','ผู้เรียนใช้โทรศัพท์มือถือส่องโต๊ะเรียน แล้วเห็นแบบจำลองหัวใจสามมิติปรากฏบนโต๊ะ สามารถเดินรอบและหมุนดูได้']],
+ q:['ข้อใดไม่ใช่องค์ประกอบของ AR ตาม Azuma (1997)',['รวมของจริงกับของเสมือน','โต้ตอบได้แบบเรียลไทม์','ต้องใช้แว่นสวมศีรษะเท่านั้น','ลงตำแหน่งในสามมิติ'],2,'นิยามของ Azuma ไม่ได้จำกัดชนิดอุปกรณ์']},
+{t:'หน่วยที่ 2 ชนิดและเทคโนโลยี AR',o:'จำแนกชนิดของ AR เปรียบเทียบ WebAR กับแอปเนทีฟ และระบุข้อจำกัดในการใช้งานได้',
+ s:[['ชนิดของ AR','Marker-based ใช้ภาพหรือรหัสเป็นตัวกระตุ้น Markerless ลงตำแหน่งวัตถุบนพื้นผิวที่ตรวจพบ Location-based ใช้พิกัดตำแหน่ง Projection-based ฉายภาพลงบนวัตถุจริง'],
+ ['WebAR และแอปเนทีฟ','WebAR เปิดผ่านเบราว์เซอร์โดยไม่ต้องติดตั้งแอป แต่ความสามารถขึ้นกับเบราว์เซอร์และอุปกรณ์ ส่วนแอปเนทีฟเข้าถึงความสามารถของอุปกรณ์ได้มากกว่าแต่ต้องติดตั้ง'],
+ ['ข้อจำกัด','อุปกรณ์ที่ไม่รองรับ สภาพแสง คุณภาพอินเทอร์เน็ต และความเป็นส่วนตัวของภาพจากกล้อง ควรได้รับการพิจารณาก่อนนำไปใช้ในชั้นเรียน']],
+ q:['ผู้เรียนส่องกล้องไปที่ภาพในหนังสือแล้วโมเดลปรากฏ เป็น AR ชนิดใด',['Location-based','Marker-based','Projection-based','VR'],1,'ภาพในหนังสือทำหน้าที่เป็นตัวกระตุ้น (marker)']},
+{t:'หน่วยที่ 3 การออกแบบสื่อ AR เพื่อการเรียนรู้',o:'ออกแบบสื่อ AR โดยเริ่มจากวัตถุประสงค์ และประยุกต์หลักการลดภาระทางปัญญาตามแนวคิดของ Mayer ได้',
+ s:[['เริ่มจากวัตถุประสงค์','เขียนวัตถุประสงค์การเรียนรู้ก่อนเลือกเทคโนโลยี เพื่อให้เทคโนโลยีเป็นเครื่องมือของการเรียนรู้ ไม่ใช่เป้าหมายในตัวเอง'],
+ ['ภาระทางปัญญาและหลักการของ Mayer','ลดองค์ประกอบที่ไม่เกี่ยวข้อง (coherence) และวางข้อความใกล้ส่วนของภาพที่เกี่ยวข้อง (spatial contiguity) เพื่อไม่ให้ผู้เรียนรับข้อมูลเกินความจำเป็น'],
+ ['ประสบการณ์ผู้ใช้และการเข้าถึง','ปุ่มและคำสั่งควรชัดเจน และต้องมีทางเลือกสำรอง เช่น ภาพนิ่งหรือวิดีโอ สำหรับผู้เรียนที่ไม่มีอุปกรณ์รองรับ']],
+ q:['เพื่อลดภาระทางปัญญา ควรวางคำอธิบายอย่างไร',['ไว้ท้ายสุดของหน้า','ใกล้ส่วนของโมเดลที่เกี่ยวข้อง','ซ่อนไว้ในเมนู','ใช้ตัวอักษรเล็กที่สุด'],1,'สอดคล้องกับ spatial contiguity']},
+{t:'หน่วยที่ 4 ปฏิบัติ: สร้างสื่อ WebAR ขั้นพื้นฐาน',o:'สร้างหน้าเว็บที่แสดงโมเดล 3 มิติ (.glb) ด้วย model-viewer และเปิดโหมด AR บนมือถือได้',
+ s:[['แนวทาง','ใช้ model-viewer (เวอร์ชัน 3.5.0 จาก CDN ของ Google) แสดงโมเดล .glb และเปิดโหมด AR บนอุปกรณ์ที่รองรับ ผลจริงขึ้นกับรุ่นเครื่องและเบราว์เซอร์']],
+ q:['แอตทริบิวต์ใดของ model-viewer ที่เปิดใช้โหมด AR',['ar','poster','loading','autoplay'],0,'แอตทริบิวต์ ar เปิดปุ่มโหมด AR']},
+{t:'หน่วยที่ 5 การทดสอบและประเมินสื่อ AR',o:'อธิบายวิธีประเมินสื่อด้วย IOC, E1/E2 และ normalized gain และคำนวณค่าเบื้องต้นได้',
+ s:[['การทดสอบกับผู้ใช้','ทดลองใช้กับผู้ใช้จริงเพื่อดูปัญหาการใช้งาน แล้วปรับปรุงก่อนใช้จริง'],
+ ['IOC','ผู้เชี่ยวชาญให้คะแนน +1, 0 หรือ −1 ต่อข้อ IOC คือผลรวมคะแนนหารด้วยจำนวนผู้เชี่ยวชาญ ใช้ข้อที่ IOC ตั้งแต่ 0.50 ขึ้นไป (Rovinelli และ Hambleton, 1977)'],
+ ['E1/E2','ประสิทธิภาพสื่อวัดจากร้อยละคะแนนระหว่างเรียนหรืองานปฏิบัติ (E1) และคะแนนหลังเรียน (E2) เกณฑ์ 80/80 หมายถึง ทั้งสองค่าไม่ต่ำกว่าร้อยละ 80'],
+ ['Normalized gain','g = (หลัง − ก่อน) ÷ (คะแนนเต็ม − ก่อน) (Hake, 1998) เกณฑ์ตีความของ Hake คือสูง ≥ 0.7, กลาง 0.3–0.7, ต่ำ < 0.3 ใช้กับค่าเฉลี่ยของกลุ่ม']],
+ q:['ผู้เชี่ยวชาญ 5 คน ให้ +1 สี่คน และ 0 หนึ่งคน ค่า IOC เท่าใด',['0.50','0.80','0.90','1.00'],1,'(4×1 + 0) ÷ 5 = 0.80']}
+];
+// ชุดข้อสอบคู่ขนาน: [หน่วย, คำถาม, ตัวเลือก, ลำดับที่ถูก (เริ่ม 0), เหตุผล]
+const SETS={
+A:[
+[1,'ข้อใดสอดคล้องกับนิยาม AR ตาม Azuma (1997) มากที่สุด',['แสดงภาพเสมือนร่วมกับโลกจริง โต้ตอบเรียลไทม์ ลงตำแหน่งสามมิติ','เปิดวิดีโอ 360 องศาในห้องมืด','แสดงภาพนิ่งบนสไลด์','แทนที่โลกจริงด้วยโลกเสมือนทั้งหมด'],0,'ตรงกับสามองค์ประกอบของ Azuma'],
+[1,'ตามแนวคิด reality–virtuality continuum ข้อใดอยู่ที่ปลายด้านสภาพแวดล้อมเสมือน',['VR','AR','สภาพแวดล้อมจริง','ภาพถ่ายดิจิทัล'],0,'VR คือสภาพแวดล้อมเสมือนทั้งหมด'],
+[2,'AR ที่ใช้ภาพบนการ์ดเป็นตัวกระตุ้นให้โมเดลปรากฏ คือชนิดใด',['Marker-based','Location-based','Projection-based','Markerless'],0,'ใช้ภาพเป็น marker'],
+[2,'ข้อใดเป็นข้อได้เปรียบหลักของ WebAR',['เปิดผ่านเบราว์เซอร์โดยไม่ต้องติดตั้งแอป','เข้าถึงทุกความสามารถของเครื่องได้เสมอ','ไม่ต้องใช้อินเทอร์เน็ต','ใช้ได้เฉพาะเครื่องรุ่นใหม่ล่าสุด'],0,'WebAR ทำงานบนเบราว์เซอร์'],
+[3,'ข้อใดควรทำเป็นอันดับแรกในการออกแบบสื่อ AR เพื่อการเรียนรู้',['เขียนวัตถุประสงค์การเรียนรู้','เลือกแอปที่ทันสมัยที่สุด','สร้างโมเดลให้ซับซ้อน','เพิ่มเสียงประกอบ'],0,'วัตถุประสงค์กำหนดการเลือกเทคโนโลยี'],
+[3,'การตัดองค์ประกอบตกแต่งที่ไม่เกี่ยวกับเนื้อหาออก สอดคล้องกับหลักใดของ Mayer',['Coherence','Redundancy','Modality','Personalization'],0,'Coherence คือการตัดสิ่งที่ไม่เกี่ยวข้อง'],
+[4,'แอตทริบิวต์ใดของ model-viewer ที่เปิดปุ่มโหมด AR',['ar','src','alt','camera-controls'],0,'แอตทริบิวต์ ar เปิดโหมด AR'],
+[4,'ไฟล์โมเดล 3 มิติที่ใช้ในหน่วยปฏิบัติมีนามสกุลใด',['.glb','.docx','.mp3','.csv'],0,'หน่วยที่ 4 ใช้ไฟล์ .glb'],
+[5,'ข้อคำถามที่ถือว่าใช้ได้ตามเกณฑ์ IOC ในหน่วยนี้ มีค่า IOC เท่าใด',['ตั้งแต่ 0.50 ขึ้นไป','ต่ำกว่า 0.50','เท่ากับ 0 เท่านั้น','ต้องเท่ากับ 1.00 เท่านั้น'],0,'เกณฑ์คือ ≥ 0.50'],
+[5,'ก่อนเรียนได้ 4 หลังเรียนได้ 7 จากคะแนนเต็ม 10 ค่า normalized gain เท่าใด',['0.30','0.43','0.50','0.75'],2,'(7−4) ÷ (10−4) = 0.50']
+],
+B:[
+[1,'องค์ประกอบใดอยู่ในนิยาม AR ของ Azuma (1997)',['ลงตำแหน่งสอดคล้องกับโลกจริงในสามมิติ','ต้องใช้แว่นศีรษะเท่านั้น','ต้องใช้ GPS','ต้องมีเสียงประกอบ'],0,'การลงตำแหน่งสามมิติเป็นองค์ประกอบหนึ่ง'],
+[1,'ข้อใดอธิบายตำแหน่งของ MR ตามแนวคิดของ Milgram และ Kishino (1994) ได้ถูกต้อง',['อยู่ระหว่างสภาพแวดล้อมจริงกับสภาพแวดล้อมเสมือน','อยู่นอกความต่อเนื่องนี้','เป็นสิ่งเดียวกับ VR','เป็นสิ่งเดียวกับโลกจริง'],0,'MR ครอบคลุมช่วงระหว่างสองปลาย'],
+[2,'AR ที่ใช้พิกัดตำแหน่งเพื่อแสดงข้อมูลตามสถานที่ คือชนิดใด',['Location-based','Marker-based','Projection-based','VR'],0,'อาศัยตำแหน่งที่ตั้ง'],
+[2,'ข้อใดเป็นข้อจำกัดของการใช้ AR ในห้องเรียน',['อุปกรณ์ของผู้เรียนอาจไม่รองรับ','ใช้ได้เฉพาะวิชาวิทยาศาสตร์','ต้องใช้โปรเจกเตอร์ทุกครั้ง','ใช้ได้เฉพาะเวลากลางคืน'],0,'ความไม่พร้อมของอุปกรณ์เป็นข้อจำกัดสำคัญ'],
+[3,'เหตุใดต้องมีทางเลือกสำรองสำหรับผู้เรียนที่ไม่มีอุปกรณ์รองรับ',['เพื่อให้ผู้เรียนทุกคนบรรลุวัตถุประสงค์เดียวกันได้','เพื่อลดจำนวนโมเดล','เพื่อให้สื่อดูซับซ้อนขึ้น','เพื่อเลี่ยงการทดสอบ'],0,'เป็นเรื่องการเข้าถึง'],
+[3,'การวางข้อความอธิบายใกล้ส่วนของโมเดลที่เกี่ยวข้อง สอดคล้องกับหลักใดของ Mayer',['Spatial contiguity','Coherence','Modality','Pre-training'],0,'ใกล้กันเชิงพื้นที่'],
+[4,'ลิงก์ของไฟล์ .glb ที่จะเปิดบนมือถือควรขึ้นต้นด้วยอะไร',['https://','ftp://','file://','c:\\'],0,'ควรเข้าถึงได้ผ่าน https'],
+[4,'ข้อใดเป็นขั้นตอนสุดท้ายของการสร้างสื่อ WebAR ในหน่วยปฏิบัติ',['ทดสอบบนมือถือ','เตรียมโมเดล','ฝากไฟล์','ใส่ลิงก์'],0,'ทดสอบเป็นขั้นสุดท้าย'],
+[5,'ผู้เชี่ยวชาญ 4 คนให้ +1 ทั้งหมด ค่า IOC ของข้อนั้นเท่าใด',['0.50','0.75','1.00','4.00'],2,'4 ÷ 4 = 1.00'],
+[5,'ค่าเฉลี่ยกลุ่ม ก่อนเรียน 5 หลังเรียน 8 จากคะแนนเต็ม 10 ค่า normalized gain เท่าใด',['0.30','0.60','0.80','0.38'],1,'(8−5) ÷ (10−5) = 0.60']
+]};
+const FIG=`<figure><svg viewBox="0 0 600 90" role="img" aria-label="ความต่อเนื่องระหว่างความจริงกับความเสมือน" style="max-width:100%"><line x1="40" y1="45" x2="560" y2="45" stroke="#1f3a5f" stroke-width="3"/><rect x="170" y="35" width="260" height="20" fill="none" stroke="#6b7a90"/><text x="40" y="78" font-size="14">สภาพแวดล้อมจริง</text><text x="300" y="25" font-size="14" text-anchor="middle">ความจริงผสม (MR)</text><text x="560" y="78" font-size="14" text-anchor="end">สภาพแวดล้อมเสมือน (VR)</text></svg><figcaption>ภาพที่ 1 ความต่อเนื่องระหว่างความจริงกับความเสมือน (ผู้จัดทำวาดอย่างง่ายตามแนวคิดของ Milgram และ Kishino, 1994)</figcaption></figure>`;
+const PRAC=`<h3>ขั้นตอนทำตามทีละข้อ</h3><ol><li>เตรียมโมเดลสามมิติเป็นไฟล์ .glb ที่มีสิทธิ์ใช้งานและมีขนาดไม่ใหญ่เกินไป</li><li>ฝากไฟล์ไว้ที่บริการที่เปิดผ่านลิงก์ https:// ได้ และอนุญาตให้เว็บอื่นเรียกใช้ไฟล์</li><li>นำลิงก์ไปใส่ในแอตทริบิวต์ src ของ model-viewer ตามตัวอย่างด้านล่าง</li><li>เปิดหน้าเว็บบนมือถือ แล้วกดปุ่ม AR เพื่อทดสอบ</li></ol>
+<pre>&lt;script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/3.5.0/model-viewer.min.js"&gt;&lt;/script&gt;
+&lt;model-viewer src="model.glb" alt="คำอธิบายโมเดล" ar ar-modes="webxr scene-viewer quick-look" camera-controls&gt;&lt;/model-viewer&gt;</pre>
+<model-viewer id="mv" src="https://modelviewer.dev/shared-assets/models/Astronaut.glb" alt="แบบจำลองนักบินอวกาศสามมิติ" ar ar-modes="webxr scene-viewer quick-look" camera-controls shadow-intensity="1" style="width:100%;height:320px"></model-viewer>
+<figcaption>ภาพที่ 2 ตัวอย่างโมเดลจากเว็บไซต์ของ model-viewer ปุ่ม AR จะปรากฏเมื่ออุปกรณ์รองรับ</figcaption>
+<div class="row"><input id="gl" placeholder="ลิงก์ .glb ของท่าน (https://...)" size="34"><button id="pv" class="alt">ดูตัวอย่าง</button></div><div id="pm"></div>
+<p>เมื่อทำเสร็จ ส่งลิงก์หรือภาพหน้าจอ/วิดีโอสั้นได้ที่เมนู "ส่งงาน AR"</p>`;
+const REFS=['Azuma, R. T. (1997). A survey of augmented reality.','Milgram, P., & Kishino, F. (1994). A taxonomy of mixed reality visual displays.','Mayer, R. E. Multimedia learning.','Rovinelli, R. J., & Hambleton, R. K. (1977). On the use of content specialists in the assessment of criterion-referenced test item validity.','Hake, R. R. (1998). Interactive-engagement versus traditional methods: A six-thousand-student survey of mechanics test data for introductory physics courses.'];
+const SUB_TYPES = ['image/png','image/jpeg','application/pdf','video/mp4'];            // ≤ 20 MB
+const MAT_TYPES = ['application/pdf','application/vnd.openxmlformats-officedocument.presentationml.presentation','application/vnd.openxmlformats-officedocument.wordprocessingml.document']; // ≤ 50 MB
+let user=null, me=null;
+
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const isUrl = u => /^https?:\/\//i.test(u);
+const ext = f => ({'image/png':'png','image/jpeg':'jpg','application/pdf':'pdf','video/mp4':'mp4','application/vnd.openxmlformats-officedocument.presentationml.presentation':'pptx','application/vnd.openxmlformats-officedocument.wordprocessingml.document':'docx'}[f.type]||'bin');
+function msg(el,t,k){ el.innerHTML = t ? `<div class="msg ${k}">${esc(t)}</div>` : ''; }
+async function signed(bucket,path){ const {data}=await sb.storage.from(bucket).createSignedUrl(path,600); return data?.signedUrl; }
+function link(text,href){ const a=document.createElement('a'); a.textContent=text; if(href&&isUrl(href)){a.href=href;a.target='_blank';a.rel='noopener';} return a; }
+const fullName = s => `${s.title||''}${s.first_name} ${s.last_name}`;
+function checkFile(f,types,mb){ if(!f) return 'เลือกไฟล์ก่อน'; if(!types.includes(f.type)) return 'ชนิดไฟล์ไม่ตรงที่กำหนด'; if(f.size>mb*1048576) return `ไฟล์ใหญ่เกิน ${mb} MB`; return ''; }
+function setNav(items){ nav.classList.remove('hide'); nav.innerHTML='';
+  items.forEach(([k,label],i)=>{ const b=document.createElement('button'); b.textContent=label; if(i===0)b.className='on';
+    b.onclick=()=>{[...nav.children].forEach(x=>x.classList.toggle('on',x===b)); V[k]();}; nav.appendChild(b); }); }
+
+// ---------- เข้าสู่ระบบ ----------
+function authView(){
+  nav.classList.add('hide'); $('out').classList.add('hide'); $('av').classList.add('hide');
+  app.innerHTML=`<div class="card"><h2>เข้าสู่ระบบ</h2><p>ผู้เรียน: ใช้รหัสนักเรียน 11 หลัก · ผู้สอน: ใช้อีเมล</p>
+    <div class="row"><input id="id" placeholder="รหัสนักเรียน หรือ อีเมลผู้สอน" autocomplete="username" size="28"></div>
+    <div class="row"><input id="pw" type="password" placeholder="รหัสผ่าน (อย่างน้อย 6 ตัว)" autocomplete="current-password" size="28"></div>
+    <div class="row"><button id="login">เข้าสู่ระบบ</button><button id="reg" class="alt">สมัครใช้งานครั้งแรก (ผู้เรียน)</button></div><div id="m"></div></div>`;
+  const cred=()=>{const v=$('id').value.trim(); return {email:/^[0-9]{11}$/.test(v)?`${v}@${EMAIL_DOMAIN}`:v, password:$('pw').value};};
+  $('login').onclick=async()=>{const {error}=await sb.auth.signInWithPassword(cred()); error?msg($('m'),'เข้าสู่ระบบไม่ได้: รหัสหรือรหัสผ่านไม่ถูกต้อง','err'):boot();};
+  $('reg').onclick=async()=>{ if(!/^[0-9]{11}$/.test($('id').value.trim())) return msg($('m'),'กรอกรหัสนักเรียน 11 หลัก','err');
+    if($('pw').value.length<6) return msg($('m'),'รหัสผ่านต้องมีอย่างน้อย 6 ตัว','err');
+    const {error}=await sb.auth.signUp(cred()); error?msg($('m'),'สมัครไม่ได้: รหัสไม่อยู่ในรายชื่อ หรือเคยสมัครแล้ว (ถามครู)','err'):boot(); };
+}
+$('out').onclick=async()=>{await sb.auth.signOut(); user=me=null; authView();};
+
+async function boot(){
+  const {data:{session}}=await sb.auth.getSession(); if(!session) return authView();
+  user=session.user; $('out').classList.remove('hide');
+  const {data:t}=await sb.from('teachers').select('user_id').eq('user_id',user.id).maybeSingle();
+  if(t){ setNav([['tRes','ผลคะแนน'],['tSub','ตรวจงาน'],['tMat','สื่อการเรียน']]); return V.tRes(); }
+  const {data}=await sb.from('students').select('*').eq('user_id',user.id).maybeSingle(); me=data;
+  if(!me){ app.innerHTML='<div class="card msg err">บัญชีนี้ยังไม่ได้เชื่อมกับรายชื่อ กรุณาแจ้งครู</div>'; return; }
+  if(me.photo_path){ const u=await signed('photos',me.photo_path); if(u){$('av').src=u;$('av').classList.remove('hide');} }
+  setNav([['units','บทเรียน'],['pre','ก่อนเรียน'],['post','หลังเรียน'],['sum','สรุปผล'],['mat','สื่อเพิ่มเติม'],['prof','โปรไฟล์'],['work','ส่งงาน AR']]); V.units();
+}
+
+// ---------- ผู้เรียน ----------
+const V = {
+ async units(){
+  const [{data:pg},{data:at}]=await Promise.all([sb.from('progress').select('unit').eq('user_id',user.id).eq('done',true), sb.from('attempts').select('kind').eq('user_id',user.id)]);
+  const done=new Set((pg||[]).map(p=>p.unit)), hasPre=(at||[]).some(a=>a.kind==='pre');
+  app.innerHTML=`<div class="card hd"><h2>แนะนำบทเรียน</h2><p>ผู้เรียน: ${esc(fullName(me))}</p><p>บทเรียนมี 5 หน่วย ใช้เวลาประมาณ 60–90 นาที ลำดับการเรียน: ทดสอบก่อนเรียน → หน่วย 1–5 (ตอบคำถามแทรกให้ถูกจึงไปต่อ) → ทดสอบหลังเรียน → สรุปผล → ส่งงานปฏิบัติ</p></div>`+
+   (hasPre?'':'<div class="msg err">ทำแบบทดสอบก่อนเรียนก่อน จึงจะเข้าหน่วยเรียนได้</div>')+
+   UNITS.map((u,i)=>`<div class="card"><h3>${esc(u.t)} ${done.has(i+1)?'<span class="done">✓ ผ่านแล้ว</span>':''}</h3><button data-n="${i+1}" ${(!hasPre||(i>0&&!done.has(i)))?'disabled':''}>เปิดหน่วยนี้</button></div>`).join('')+
+   `<div class="card"><h3>เอกสารอ้างอิง</h3>${REFS.map(r=>`<p>${esc(r)}</p>`).join('')}</div>`;
+  app.querySelectorAll('button[data-n]').forEach(b=>b.onclick=()=>V.unit(+b.dataset.n));
+ },
+ unit(n){
+  const u=UNITS[n-1];
+  app.innerHTML=`<div class="card hd"><h2>${esc(u.t)}</h2><p><b>วัตถุประสงค์:</b> ${esc(u.o)}</p></div>
+   <div class="card">${u.s.map(([h,p])=>`<h3>${esc(h)}</h3><p>${esc(p)}</p>`).join('')}${n===1?FIG:''}${n===4?PRAC:''}</div>
+   <div class="card"><h3>คำถามแทรก</h3><div class="q"><b>${esc(u.q[0])}</b>${u.q[1].map((c,k)=>`<label><input type="radio" name="iq" value="${k}"> ${esc(c)}</label>`).join('')}</div>
+   <button id="ck">ตรวจคำตอบ</button><div id="m"></div></div><button id="back" class="alt">กลับรายการหน่วย</button>`;
+  $('back').onclick=()=>V.units();
+  if(n===4) $('pv').onclick=()=>{ const g=$('gl').value.trim(); if(!/^https:\/\//i.test(g)) return msg($('pm'),'ใช้ลิงก์ที่ขึ้นต้นด้วย https:// และชี้ไปยังไฟล์ .glb','err'); $('mv').setAttribute('src',g); msg($('pm'),'กำลังโหลดโมเดลตัวอย่าง','ok'); };
+  $('ck').onclick=async()=>{ const x=app.querySelector('input[name=iq]:checked'); if(!x) return msg($('m'),'เลือกคำตอบก่อน','err');
+   if(+x.value!==u.q[2]) return msg($('m'),'ยังไม่ถูกต้อง: '+u.q[3]+' ลองทบทวนแล้วตอบใหม่','err');
+   const r=await sb.from('progress').upsert({user_id:user.id,unit:n,done:true}); if(r.error) return msg($('m'),'บันทึกความก้าวหน้าไม่สำเร็จ','err');
+   msg($('m'),'ถูกต้อง: '+u.q[3],'ok'); const nb=document.createElement('button'); nb.textContent=n<UNITS.length?'ไปหน่วยถัดไป':'จบบทเรียน ไปทดสอบหลังเรียน';
+   nb.onclick=()=>n<UNITS.length?V.unit(n+1):V.units(); $('m').appendChild(nb); };
+ },
+ pre(){ return test('pre'); }, post(){ return test('post'); },
+ async sum(){
+  const {data}=await sb.from('attempts').select('*').eq('user_id',user.id); const p=(data||[]).find(a=>a.kind==='pre'), q=(data||[]).find(a=>a.kind==='post');
+  if(!p||!q){ app.innerHTML='<div class="card"><h2>สรุปผล</h2><p>ต้องทำแบบทดสอบทั้งก่อนและหลังเรียนก่อน จึงจะแสดงสรุปผล</p></div>'; return; }
+  const g=gain(p.score,q.score);
+  app.innerHTML=`<div class="card hd"><h2>สรุปผล</h2></div><div class="card"><div class="table-wrap"><table><tr><th>คะแนนก่อนเรียน</th><th>คะแนนหลังเรียน</th><th>Normalized gain</th></tr>
+   <tr><td>${p.score}/${TOTAL}</td><td>${q.score}/${TOTAL}</td><td>${g==null?'คำนวณไม่ได้ (คะแนนก่อนเรียนเต็ม)':g.toFixed(2)}</td></tr></table></div>
+   <p>หมายเหตุ: เกณฑ์ตีความของ Hake (1998) (สูง ≥ 0.7, กลาง 0.3–0.7, ต่ำ < 0.3) ใช้กับค่าเฉลี่ยของกลุ่ม ไม่ควรใช้ตัดสินผู้เรียนรายบุคคล</p></div>`;
+ },
+ async work(){
+  const {data}=await sb.from('submissions').select('*').eq('user_id',user.id).order('created_at',{ascending:false});
+  app.innerHTML=`<div class="card"><h2>ส่งงานปฏิบัติ AR</h2>
+   <div class="row"><select id="u">${UNITS.map((u,i)=>`<option value="${i+1}">${esc(u.t)}</option>`).join('')}</select>
+   <select id="k"><option value="link">ส่งเป็นลิงก์</option><option value="file">ส่งเป็นไฟล์ (png, jpg, pdf, mp4 ≤ 20 MB)</option></select></div>
+   <div class="row"><input id="url" placeholder="วางลิงก์ https://..." size="36"><input id="f" type="file" accept=".png,.jpg,.jpeg,.pdf,.mp4" class="hide"></div>
+   <div class="row"><input id="n" placeholder="ข้อความถึงครู (ไม่บังคับ)" size="36"></div><button id="go">ส่งงาน</button><div id="m"></div></div>
+   <div class="card"><h2>งานที่ส่งแล้ว</h2><div id="l"></div></div>`;
+  $('k').onchange=()=>{const f=$('k').value==='file'; $('f').classList.toggle('hide',!f); $('url').classList.toggle('hide',f);};
+  $('go').onclick=async()=>{ const kind=$('k').value, row={user_id:user.id,unit:+$('u').value,kind,note:$('n').value.trim()||null};
+    if(kind==='link'){ row.url=$('url').value.trim(); if(!isUrl(row.url)) return msg($('m'),'ลิงก์ต้องขึ้นต้นด้วย http:// หรือ https://','err'); }
+    else { const f=$('f').files[0], e=checkFile(f,SUB_TYPES,20); if(e) return msg($('m'),e,'err');
+      row.storage_path=`${user.id}/${Date.now()}.${ext(f)}`; const u=await sb.storage.from('submissions').upload(row.storage_path,f,{contentType:f.type}); if(u.error) return msg($('m'),'อัปโหลดไม่สำเร็จ','err'); }
+    const r=await sb.from('submissions').insert(row); r.error?msg($('m'),'บันทึกไม่สำเร็จ','err'):V.work(); };
+  const l=$('l'); if(!data?.length) l.textContent='ยังไม่มีงาน ส่งงานชิ้นแรกได้ที่ฟอร์มด้านบน';
+  for(const s of data||[]){ const p=document.createElement('p'); p.append(`หน่วย ${s.unit} · ${new Date(s.created_at).toLocaleDateString('th-TH')} · `,
+    s.kind==='link'?link('เปิดลิงก์',s.url):link('เปิดไฟล์',await signed('submissions',s.storage_path)),
+    s.score!=null?` · คะแนน ${s.score} ${s.teacher_comment||''}`:' · รอครูตรวจ'); l.appendChild(p); }
+ },
+ async mat(){ const {data}=await sb.from('materials').select('*').order('created_at',{ascending:false});
+  app.innerHTML='<div class="card"><h2>สื่อการเรียน</h2><div id="l"></div></div>'; const l=$('l'); if(!data?.length) l.textContent='ครูยังไม่ได้อัปโหลดสื่อ';
+  for(const m of data||[]){ const p=document.createElement('p'); p.append(({file:'📄 ',link:'🔗 ',video:'🎬 '})[m.kind], link(m.title, m.kind==='file'?await signed('materials',m.storage_path):m.url)); l.appendChild(p); } },
+ prof(){
+  app.innerHTML=`<div class="card"><h2>${esc(fullName(me))}</h2><p>รหัส ${esc(me.id)} · ห้อง ${esc(me.section||'-')}</p>
+   <div class="row"><input id="f" type="file" accept=".png,.jpg,.jpeg"><button id="go">เปลี่ยนรูปโปรไฟล์</button></div><p>ระบบย่อรูปให้อัตโนมัติก่อนอัปโหลด</p><div id="m"></div></div>`;
+  $('go').onclick=async()=>{ const f=$('f').files[0]; if(!f||!['image/png','image/jpeg'].includes(f.type)) return msg($('m'),'เลือกรูปชนิด png หรือ jpg','err');
+   let blob; try{ blob=await shrink(f); }catch(e){ return msg($('m'),'อ่านรูปไม่ได้','err'); }
+   if(blob.size>2*1048576) return msg($('m'),'รูปใหญ่เกิน 2 MB','err');
+   const path=`${user.id}/photo.jpg`; const u=await sb.storage.from('photos').upload(path,blob,{upsert:true,contentType:'image/jpeg'}); if(u.error) return msg($('m'),'อัปโหลดไม่สำเร็จ','err');
+   await sb.from('students').update({photo_path:path}).eq('user_id',user.id); me.photo_path=path;
+   $('av').src=await signed('photos',path); $('av').classList.remove('hide'); msg($('m'),'เปลี่ยนรูปแล้ว','ok'); };
+ },
+// ---------- ผู้สอน ----------
+ async tRes(){
+  const [{data:r},{data:st}]=await Promise.all([sb.from('results').select('*').order('id'), sb.from('students').select('id,photo_path')]);
+  const paths=(st||[]).filter(x=>x.photo_path).map(x=>x.photo_path), urls={};
+  if(paths.length){ const {data:u}=await sb.storage.from('photos').createSignedUrls(paths,600); (u||[]).forEach(x=>{ if(x.signedUrl) urls[x.path]=x.signedUrl; }); }
+  const pp=Object.fromEntries((st||[]).map(x=>[x.id,x.photo_path]));
+  const head=['รหัส','ชื่อ','ห้อง','สถานะ','หน่วยที่เรียน','ก่อนเรียน','หลังเรียน','gain','งานที่ส่ง','คะแนนงานเฉลี่ย'];
+  const rows=(r||[]).map(x=>{ const g=gain(x.pre_score,x.post_score); return [x.id,fullName(x),x.section,x.user_id?'สมัครแล้ว':'ยังไม่สมัคร',x.units_done+'/'+UNITS.length,x.pre_score,x.post_score,g==null?'':g.toFixed(2),x.submissions_count,x.avg_submission_score]; });
+  app.innerHTML=`<div class="card"><h2>ผลรายคน</h2><button id="csv">ส่งออก CSV</button><div class="table-wrap"><table><thead><tr><th>รูป</th>${head.map(h=>`<th>${h}</th>`).join('')}</tr></thead><tbody id="tb"></tbody></table></div></div>`;
+  rows.forEach(row=>{ const tr=document.createElement('tr'); const td=document.createElement('td'); const u=urls[pp[row[0]]];
+   if(u){ const im=document.createElement('img'); im.src=u; im.alt='รูป'; im.className='avatar'; im.style.width=im.style.height='36px'; td.appendChild(im); } tr.appendChild(td);
+   row.forEach(c=>{ const d=document.createElement('td'); d.textContent=c??''; tr.appendChild(d); }); $('tb').appendChild(tr); });
+  $('csv').onclick=()=>{ const q=c=>{c=String(c??''); if(/^[=+\-@]/.test(c)) c="'"+c; return '"'+c.replace(/"/g,'""')+'"';};
+   const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob(['\uFEFF'+[head,...rows].map(r=>r.map(q).join(',')).join('\r\n')],{type:'text/csv;charset=utf-8'})); a.download='results.csv'; a.click(); };
+ },
+ async tSub(){
+  const [{data:s},{data:st}]=await Promise.all([sb.from('submissions').select('*').order('created_at',{ascending:false}), sb.from('students').select('*')]);
+  const nm=Object.fromEntries((st||[]).map(x=>[x.user_id,fullName(x)]));
+  app.innerHTML='<div class="card"><h2>ตรวจงาน</h2><div id="l"></div></div>'; const l=$('l'); if(!s?.length) l.textContent='ยังไม่มีงานที่ส่ง';
+  for(const x of s||[]){ const d=document.createElement('div'); d.className='q';
+   d.append(`${nm[x.user_id]||'?'} · หน่วย ${x.unit} · ${x.note||''} `, x.kind==='link'?link('เปิดลิงก์',x.url):link('เปิดไฟล์',await signed('submissions',x.storage_path)));
+   const row=document.createElement('div'); row.className='row';
+   row.innerHTML=`<input type="number" step="0.5" min="0" placeholder="คะแนน" style="width:100px"><input placeholder="ความเห็น" size="24"><button>บันทึก</button><span></span>`;
+   const [sc,cm]=row.querySelectorAll('input'); sc.value=x.score??''; cm.value=x.teacher_comment??'';
+   row.querySelector('button').onclick=async()=>{const {error}=await sb.from('submissions').update({score:sc.value===''?null:+sc.value,teacher_comment:cm.value||null}).eq('id',x.id); row.querySelector('span').textContent=error?'บันทึกไม่สำเร็จ':'บันทึกแล้ว';};
+   d.appendChild(row); l.appendChild(d); }
+ },
+ async tMat(){
+  const {data}=await sb.from('materials').select('*').order('created_at',{ascending:false});
+  app.innerHTML=`<div class="card"><h2>เพิ่มสื่อการเรียน</h2>
+   <div class="row"><input id="t" placeholder="ชื่อสื่อ" size="28"><select id="k"><option value="file">ไฟล์ (pptx, docx, pdf ≤ 50 MB)</option><option value="link">ลิงก์</option><option value="video">วิดีโอ (ลิงก์)</option></select></div>
+   <div class="row"><input id="f" type="file" accept=".pdf,.pptx,.docx"><input id="url" class="hide" placeholder="https://..." size="36"></div><button id="go">เพิ่ม</button><div id="m"></div></div>
+   <div class="card"><h2>สื่อที่มี</h2><div id="l"></div></div>`;
+  $('k').onchange=()=>{const f=$('k').value==='file'; $('f').classList.toggle('hide',!f); $('url').classList.toggle('hide',f);};
+  $('go').onclick=async()=>{ const kind=$('k').value, title=$('t').value.trim(); if(!title) return msg($('m'),'ใส่ชื่อสื่อ','err'); const row={title,kind};
+   if(kind==='file'){ const f=$('f').files[0], e=checkFile(f,MAT_TYPES,50); if(e) return msg($('m'),e,'err');
+     row.storage_path=`${Date.now()}.${ext(f)}`; row.file_name=f.name; const u=await sb.storage.from('materials').upload(row.storage_path,f,{contentType:f.type}); if(u.error) return msg($('m'),'อัปโหลดไม่สำเร็จ','err'); }
+   else { row.url=$('url').value.trim(); if(!isUrl(row.url)) return msg($('m'),'ลิงก์ต้องขึ้นต้นด้วย http:// หรือ https://','err'); }
+   const r=await sb.from('materials').insert(row); r.error?msg($('m'),'บันทึกไม่สำเร็จ','err'):V.tMat(); };
+  const l=$('l'); if(!data?.length) l.textContent='ยังไม่มีสื่อ';
+  (data||[]).forEach(m=>{ const p=document.createElement('p'); const b=document.createElement('button'); b.className='alt'; b.textContent='ลบ';
+   b.onclick=async()=>{ if(!confirm('ลบสื่อนี้?')) return; if(m.storage_path) await sb.storage.from('materials').remove([m.storage_path]); await sb.from('materials').delete().eq('id',m.id); V.tMat(); };
+   p.append(`${m.kind} · ${m.title} `,b); l.appendChild(p); });
+ }
+};
+
+const TOTAL=10;
+const gain=(pre,post)=>(pre==null||post==null||pre>=TOTAL)?null:(post-pre)/(TOTAL-pre);
+const setFor=k=>((k==='pre')===(+me.id.slice(-1)%2===0))?'A':'B';   // รหัสลงท้ายเลขคู่: ก่อน=A หลัง=B ; เลขคี่: ก่อน=B หลัง=A
+function shrink(f){ return createImageBitmap(f).then(bm=>{ const k=Math.min(1,512/Math.max(bm.width,bm.height)), c=document.createElement('canvas'); c.width=Math.round(bm.width*k); c.height=Math.round(bm.height*k);
+  c.getContext('2d').drawImage(bm,0,0,c.width,c.height); return new Promise((ok,no)=>c.toBlob(b=>b?ok(b):no(),'image/jpeg',0.85)); }); }
+function setupView(){ app.innerHTML='<div class="card hd"><h2>ยังไม่ได้ตั้งค่าระบบ</h2></div><div class="card"><ol><li>เปิดไฟล์ courseware.html ด้วยโปรแกรมแก้ข้อความ</li><li>ที่ต้นสคริปต์ แก้ SUPABASE_URL และ SUPABASE_ANON_KEY เป็นค่าจาก Supabase → Project Settings → API (ใช้ anon public key เท่านั้น)</li><li>บันทึกไฟล์ แล้วเปิดหน้านี้ใหม่</li></ol></div>'; }
+async function test(kind){
+  const name=kind==='pre'?'ก่อนเรียน':'หลังเรียน';
+  const {data:all}=await sb.from('attempts').select('*').eq('user_id',user.id); const at=(all||[]).find(a=>a.kind===kind);
+  if(at){ let h=`<div class="card hd"><h2>แบบทดสอบ${name}</h2><p>ทำแล้ว ได้ ${at.score}/${TOTAL} คะแนน (ทำได้ครั้งเดียว)</p></div>`;
+   if(kind==='post'){ const S=SETS[at.answers?.set]||SETS[setFor('post')];
+    h+=S.map((x,i)=>{ const a=at.answers?.a?.[i]; return `<div class="q"><b>${i+1}. ${esc(x[1])}</b> (หน่วยที่ ${x[0]})<br>คำตอบของท่าน: ${esc(x[2][a]??'-')} — ${a===x[3]?'ถูก':'ผิด'}<br>เฉลย: ${esc(x[2][x[3]])}<br>เหตุผล: ${esc(x[4])}</div>`; }).join(''); }
+   app.innerHTML=h; return; }
+  if(kind==='post'){ const {data:p}=await sb.from('progress').select('unit').eq('user_id',user.id).eq('done',true);
+   if((p||[]).length<UNITS.length){ app.innerHTML='<div class="card"><h2>แบบทดสอบหลังเรียน</h2><p>เรียนให้ครบทุกหน่วยก่อน จึงจะทำแบบทดสอบนี้ได้</p></div>'; return; } }
+  const key=setFor(kind), S=SETS[key];
+  app.innerHTML=`<div class="card hd"><h2>แบบทดสอบ${name}</h2><p>${S.length} ข้อ ทำได้ครั้งเดียว ${kind==='pre'?'ไม่แสดงเฉลย':'แสดงเฉลยหลังส่ง'} ตอบให้ครบก่อนกดส่ง</p></div>`+
+   S.map((q,i)=>`<div class="card"><b>${i+1}. ${esc(q[1])}</b>${q[2].map((c,k)=>`<label style="display:block"><input type="radio" name="q${i}" value="${k}"> ${esc(c)}</label>`).join('')}</div>`).join('')+`<button id="go">ส่งคำตอบ</button><div id="m"></div>`;
+  $('go').onclick=async()=>{ const ans=S.map((q,i)=>{ const x=app.querySelector(`input[name=q${i}]:checked`); return x?+x.value:null; });
+   if(ans.includes(null)) return msg($('m'),'ตอบให้ครบทุกข้อก่อนส่ง','err'); if(!confirm('ส่งแล้วแก้ไขไม่ได้ ยืนยันหรือไม่')) return;
+   const score=ans.filter((a,i)=>a===S[i][3]).length;
+   const {error}=await sb.from('attempts').insert({user_id:user.id,kind,score,answers:{set:key,a:ans}});
+   error?msg($('m'),'บันทึกไม่สำเร็จ (อาจเคยทำชุดนี้ไปแล้ว)','err'):test(kind); };
+}
+CFG_MISSING?setupView():boot();
+</script>
+</body>
+</html>
